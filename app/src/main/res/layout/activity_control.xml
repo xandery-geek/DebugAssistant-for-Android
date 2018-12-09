@@ -33,6 +33,8 @@
             android:layout_width="match_parent"
             android:layout_height="113dp"
             android:background="@drawable/border"
+            android:scrollbars="vertical"
+            android:fadeScrollbars="false"
             android:singleLine="false"
             android:text="" />
 
@@ -173,13 +175,14 @@
 
     <Button
         android:id="@+id/joystick"
-        android:layout_width="45dp"
-        android:layout_height="45dp"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintHorizontal_bias="0.488"
         app:layout_constraintStart_toEndOf="@+id/guideline"
-        app:layout_constraintTop_toBottomOf="@+id/space5" />
+        app:layout_constraintTop_toBottomOf="@+id/space5"
+        app:layout_constraintVertical_bias="0.328" />
 
     <Space
         android:id="@+id/space5"

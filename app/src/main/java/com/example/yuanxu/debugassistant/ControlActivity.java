@@ -6,24 +6,28 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.graphics.Point;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.method.ScrollingMovementMethod;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class ControlActivity extends Activity {
 
-    private final int RADIUS = 99;
+    private final int RADIUS = 200;
+    private float last_x;
+    private float last_y;
     private int width = 0;
     private int height = 0;
+
     //widget
     private List<Button> fun_button = new ArrayList<>();
 
@@ -34,9 +38,10 @@ public class ControlActivity extends Activity {
 
     //service
     private BluetoothService service = null;
+    private ContentReceiver contentReceiver;
 
     //joystick
-    private Point joystick_center = new Point();
+    private Point joystick_origin = new Point();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,21 +49,46 @@ public class ControlActivity extends Activity {
         setContentView(R.layout.activity_control);
 
         initWidget();
-        setListening();
-
+        setListener();
         binBluetoothService();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        //广播接受者
+        contentReceiver = new ContentReceiver();
+        //过滤器
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("ServiceBoardCast");
+        //注册广播
+        registerReceiver(contentReceiver, intentFilter);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        unregisterReceiver(contentReceiver);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        joystick_origin.set(joystick.getLeft(), joystick.getTop());
+        width = joystick.getWidth();
+        height = joystick.getHeight();
     }
 
     private void initWidget()
     {
         joystick = findViewById(R.id.joystick);
-        joystick_center.set(joystick.getLeft(), joystick.getTop());
-        width = joystick.getWidth();
-        height = joystick.getHeight();
 
         x_text = findViewById(R.id.x_edit);
         y_text = findViewById(R.id.y_edit);
+
         receive_text = findViewById(R.id.con_receive_text);
+        receive_text.setMovementMethod(ScrollingMovementMethod.getInstance());
 
         fun_button.add((Button) findViewById(R.id.fun_button1));
         fun_button.add((Button) findViewById(R.id.fun_button2));
@@ -69,7 +99,7 @@ public class ControlActivity extends Activity {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private void setListening()
+    private void setListener()
     {
         for (Button button: fun_button) {
             button.setOnClickListener(new ClickListening());
@@ -82,30 +112,62 @@ public class ControlActivity extends Activity {
                 if(event.getActionMasked() == MotionEvent.ACTION_UP)
                 {
                     //回到原点
-                    moveJoystick(joystick_center.x, joystick_center.y);
+                    moveJoystick(joystick_origin.x, joystick_origin.y);
                     setSpeedText(new Point(0,0));
                     sendData("X0Y0");
                 }
                 else if(event.getActionMasked() == MotionEvent.ACTION_MOVE)
                 {
-                    float dx = event.getX() - joystick_center.x;
-                    float dy = event.getY() - joystick_center.y;
-                    Point speed = calSpeed(dx, dy);
 
+                    float dx = event.getX() - last_x;   //计算移动的距离
+                    float dy = event.getY() - last_y;   //
+
+                    if(dx > RADIUS)
+                    {
+                        dx = RADIUS;
+                    }
+                    else if (dx < -RADIUS)
+                    {
+                        dx = -RADIUS;
+                    }
+
+                    if (dy > RADIUS)
+                    {
+                        dy = RADIUS;
+                    }
+                    else if (dy < -RADIUS)
+                    {
+                        dy = -RADIUS;
+                    }
+
+                    int left = (int) (joystick_origin.x + dx);
+                    int top = (int) (joystick_origin.y + dy);
+
+                    //移动
+                    moveJoystick(left, top);
+                    Point speed = calSpeed(left, top);
                     setSpeedText(speed);
                     sendData("X"+ speed.x + "Y" + speed.y);
                 }
-                //else if(event.getActionMasked() == MotionEvent.ACTION_DOWN) { }
+                else if(event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+
+                    last_x = event.getX();
+                    last_y = event.getY();
+                }
                 return true;
             }
         });
     }
 
     private void binBluetoothService() {
-        //bluetooth service
-        BluetoothServiceConnect serviceConnect = new BluetoothServiceConnect();
-        Intent intent = new Intent(ControlActivity.this, BluetoothService.class);
-        bindService(intent, serviceConnect, BIND_AUTO_CREATE);
+
+        if(BluetoothService.isRunning()) {
+            //bluetooth service
+            BluetoothServiceConnect serviceConnect = new BluetoothServiceConnect();
+            Intent intent = new Intent(ControlActivity.this, BluetoothService.class);
+
+            bindService(intent, serviceConnect, BIND_AUTO_CREATE);
+        }
     }
 
     //发送数据
@@ -115,52 +177,22 @@ public class ControlActivity extends Activity {
         {
             service.setSendStream(str);
         }
-        else
-        {
-            Toast.makeText(ControlActivity.this, "请先连接蓝牙", Toast.LENGTH_SHORT).show();
-        }
     }
 
-    private Point calSpeed(float dx, float dy)
+    private Point calSpeed(int left, int top)
     {
         Point speed = new Point();
-        dy = -dy;
-
-        if(dx > RADIUS)
-        {
-            dx = RADIUS;
-        }
-        else if(dx < -RADIUS)
-        {
-            dx = -RADIUS;
-        }
-
-        if (dy > RADIUS)
-        {
-            dy = RADIUS;
-        }
-        else if(dy < -RADIUS)
-        {
-            dy = -RADIUS;
-        }
-
-        moveJoystick(joystick_center.x + (int)dx, joystick_center.y + (int)dy );
-
-        speed.set((int) dx, (int) dy);
+        speed.set(left - joystick_origin.x, top-joystick_origin.y);
+        speed.y = -speed.y;
 
         if(Math.sqrt(Math.pow(speed.x ,2) + Math.pow(speed.y, 2)) > RADIUS)
         {
-            if (speed.y >= 0)
-            {
-                double theta = Math.atan2(speed.y , speed.x);
-                speed.set((int)(RADIUS * Math.cos(theta)), (int)(RADIUS * Math.sin(theta)));
-            }
-            else
-            {
-                double theta = Math.atan2(speed.y, speed.x);
-                speed.set((int)(RADIUS * Math.cos(theta)),(int) (RADIUS * Math.sin(theta)));
-            }
+            double theta = Math.atan2(speed.y , speed.x);
+            speed.set((int)(RADIUS * Math.cos(theta)), (int)(RADIUS * Math.sin(theta)));
         }
+        float rate = (float) 100/RADIUS;
+        speed.x = (int) (speed.x * rate);
+        speed.y = (int) (speed.y * rate);
         return speed;
     }
 
@@ -175,7 +207,6 @@ public class ControlActivity extends Activity {
 
     private void moveJoystick(int x, int y)
     {
-        //joystick.setLayoutParams(new RelativeLayout.LayoutParams(x,y));
         joystick.layout(x, y, x+width, y+height);
     }
 
@@ -199,6 +230,12 @@ public class ControlActivity extends Activity {
         public void onReceive(Context context, Intent intent) {
             String str = intent.getStringExtra("info");
             receive_text.append(str);
+
+            int offset = receive_text.getLineCount() * receive_text.getLineHeight();
+
+            if(offset > receive_text.getLineHeight()) {
+                receive_text.scrollTo(0, offset);
+            }
         }
     }
 

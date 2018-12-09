@@ -12,15 +12,15 @@ import java.io.OutputStream;
 public class BluetoothService extends Service
 {
     //输入输出流
-    private boolean run_state = true;
+    private static boolean run_state = false;
     private BluetoothSocket bluetoothSocket;
-    private String send_string;
+    private String send_string = "";
     private Thread thread;
+    private static String device_name = null;
 
     @Override
     public void onCreate() {
         super.onCreate();
-
     }
 
     @Override
@@ -33,15 +33,9 @@ public class BluetoothService extends Service
             @Override
             public void run() {
 
-                if(bluetoothSocket != null)
+                if(bluetoothSocket != null && bluetoothSocket.isConnected())
                 {
-                    try {
-                        bluetoothSocket.connect();
-                        run_state = true;
-                    }
-                    catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    run_state = true;
                 }
                 else
                 {
@@ -49,17 +43,21 @@ public class BluetoothService extends Service
                     return;
                 }
 
-                //蓝牙串口Socket一直连接
-                while (bluetoothSocket != null)
-                {
-                    synchronized (this) {
+                InputStream inputStream;
+                byte[] read_byte = new byte[1024];
 
-                        if (!send_string.isEmpty()) {
+                //蓝牙串口Socket一直连接
+                while (bluetoothSocket != null && bluetoothSocket.isConnected())
+                {
+                    if (!send_string.isEmpty())
+                    {
+                        synchronized (this) {
                             //发送信息, 加锁
                             try {
                                 OutputStream outputStream = bluetoothSocket.getOutputStream();
                                 outputStream.write(send_string.getBytes());
                                 outputStream.flush();
+                                send_string = "";   //清空
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
@@ -68,11 +66,9 @@ public class BluetoothService extends Service
 
                     //接收信息
                     try {
-
-                        InputStream inputStream = bluetoothSocket.getInputStream();
-                        String str = inputStream.toString();
-                        if(!str.isEmpty())
-                        {
+                        inputStream = bluetoothSocket.getInputStream();
+                        if(inputStream.read(read_byte) > 0) {
+                            String str = new String(read_byte); //字节数组转字符串
                             sendContentBroadcast(str);
                         }
                     }
@@ -83,6 +79,7 @@ public class BluetoothService extends Service
                 run_state = false;
             }
         });
+        //开启线程
         thread.start();
 
         return super.onStartCommand(intent, flags, startId);
@@ -91,7 +88,16 @@ public class BluetoothService extends Service
     @Override
     public void onDestroy() {
         super.onDestroy();
+
+        //关闭Socket
+        try {
+            bluetoothSocket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         bluetoothSocket = null;
+        device_name = null;
         try {
             thread.join();  //等待线程退出
         } catch (InterruptedException e) {
@@ -103,11 +109,6 @@ public class BluetoothService extends Service
     public IBinder onBind(Intent intent) {
 
         return new LocalBinder();
-    }
-
-    public boolean isRunning()
-    {
-        return run_state;
     }
 
     public void setSendStream(String s)
@@ -130,8 +131,22 @@ public class BluetoothService extends Service
     private void sendContentBroadcast(String s)
     {
         Intent intent = new Intent();
+        intent.setAction("ServiceBoardCast");
         intent.putExtra("info", s);
         sendBroadcast(intent);
     }
-}
 
+    //静态方法
+    public static boolean isRunning()
+    {
+        return run_state;
+    }
+
+    public static String getName(){
+        return device_name;
+    }
+
+    public static void setName(String name){
+        device_name = name;
+    }
+}

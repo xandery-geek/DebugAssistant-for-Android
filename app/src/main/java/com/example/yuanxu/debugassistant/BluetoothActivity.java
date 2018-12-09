@@ -37,8 +37,9 @@ public class BluetoothActivity extends Activity {
 
     //Widget
     private Switch bluetooth_switch;
-    private TextView device_name;
+    private TextView device_view;
     private ListView device_list;
+    private String device_name;
 
     private ListAdapter listAdapter;
 
@@ -53,14 +54,49 @@ public class BluetoothActivity extends Activity {
         setContentView(R.layout.activity_bluetooth);    //设置布局
 
         initWidget();
+        initConfigure();
         setListening();
     }
 
     private void initWidget()
     {
         bluetooth_switch = findViewById(R.id.bluetooth_switch);
-        device_name = findViewById(R.id.bluetooth_text);
+        device_view = findViewById(R.id.bluetooth_text);
         device_list = findViewById(R.id.device_list);
+    }
+
+    private void initConfigure() {
+
+        //没有蓝牙权限, 申请权限(蓝牙和位置信息)
+        if(ContextCompat.checkSelfPermission(BluetoothActivity.this,
+                Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+        {
+            ActivityCompat.requestPermissions(BluetoothActivity.this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_CODE);
+        }
+
+        local_bluetooth = BluetoothAdapter.getDefaultAdapter();
+
+        if(local_bluetooth == null)
+        {
+            Toast.makeText(BluetoothActivity.this, "获取蓝牙失败,可能该设备不支持蓝牙", Toast.LENGTH_LONG).show();
+        }
+        else
+        {
+            if(local_bluetooth.isEnabled())
+            {
+                bluetooth_switch.setChecked(true);
+                discoverDevice();
+                if(BluetoothService.isRunning())
+                {
+                    device_view.setText(BluetoothService.getName());
+                }
+                else
+                {
+                    device_view.setText("");
+                }
+            }
+        }
     }
 
     private void setListening()
@@ -73,6 +109,12 @@ public class BluetoothActivity extends Activity {
                 {
                     if(startBluetooth())
                     {
+                        //等待1000ms
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                         discoverDevice();   //查看已配对的蓝牙设备
                     }
                 }
@@ -96,23 +138,10 @@ public class BluetoothActivity extends Activity {
 
     private boolean startBluetooth()
     {
-        //没有蓝牙权限, 申请权限(蓝牙和位置信息)
-        if(ContextCompat.checkSelfPermission(BluetoothActivity.this,
-                Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-        {
-            ActivityCompat.requestPermissions(BluetoothActivity.this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_CODE);
-        }
-
-        //获得蓝牙适配器
-        local_bluetooth = BluetoothAdapter.getDefaultAdapter();
-
         if(local_bluetooth == null)
         {
-            Toast.makeText(BluetoothActivity.this, "获取蓝牙失败,可能该设备不支持蓝牙", Toast.LENGTH_LONG).show();
-            return false;
+            local_bluetooth = BluetoothAdapter.getDefaultAdapter();
         }
-
         //打开蓝牙
         if(!local_bluetooth.isEnabled())
         {
@@ -128,7 +157,6 @@ public class BluetoothActivity extends Activity {
 
     private void discoverDevice()
     {
-        Log.i("BlueActivity", "扫描已绑定的蓝牙");
         //获得本地蓝牙已绑定的蓝牙设备
         Set<BluetoothDevice> devices = local_bluetooth.getBondedDevices();
         if(devices.isEmpty())
@@ -145,28 +173,63 @@ public class BluetoothActivity extends Activity {
 
     private void connectDevice(String name, String address)
     {
+        if(device_name != null)
+        {
+            if(device_name.equals(name))
+            {
+                Toast.makeText(BluetoothActivity.this, "该设备已连接", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            else {
+
+                try {
+                    bluetoothSocket.close();
+                    device_view.setText("");
+                }
+                catch (IOException e)
+                {
+                    e.printStackTrace();
+                }
+            }
+        }
+
         GlobalBlueSocket globalBlueSocket = (GlobalBlueSocket)getApplication();
-        bluetoothSocket = globalBlueSocket.getGlobalBluetoothSocket();
 
         //获得远程蓝牙设备
         BluetoothDevice  device = local_bluetooth.getRemoteDevice(address);
 
         try {
             //建立Socket连接
-            bluetoothSocket = device.createRfcommSocketToServiceRecord(BLUETOOTH_UUID);
+            BluetoothSocket socket = device.createRfcommSocketToServiceRecord(BLUETOOTH_UUID);
+            globalBlueSocket.setGlobalBluetoothSocket(socket);
         }
         catch (IOException e)
         {
             Toast.makeText(BluetoothActivity.this, "连接失败", Toast.LENGTH_SHORT).show();
             globalBlueSocket.setGlobalBluetoothSocket(null);
         }
+        bluetoothSocket = globalBlueSocket.getGlobalBluetoothSocket();
+
+        if(bluetoothSocket != null) {
+            try {
+                Toast.makeText(BluetoothActivity.this, "正在连接",Toast.LENGTH_SHORT).show();
+                bluetoothSocket.connect();
+            } catch (IOException e) {
+                Toast.makeText(BluetoothActivity.this, "连接失败", Toast.LENGTH_SHORT).show();
+            }
+        }
+
         //开启服务
-        if (bluetoothSocket != null)
+        if (bluetoothSocket != null && bluetoothSocket.isConnected())
         {
+            device_name = name;
+
+            //开启服务
             Intent intent = new Intent(BluetoothActivity.this, BluetoothService.class);
             startService(intent);
-            //无法保证线程确实开启,待改进
-            device_name.setText(name);
+            BluetoothService.setName(device_name);
+
+            device_view.setText(device_name);
             Toast.makeText(BluetoothActivity.this, "连接成功", Toast.LENGTH_SHORT).show();
         }
         else
@@ -177,12 +240,10 @@ public class BluetoothActivity extends Activity {
 
     private void closeBluetooth()
     {
-        device_name.setText("");
-        bonded_device.clear();
-        //清空ListView适配器
-        listAdapter.clear();
-        listAdapter.notifyDataSetChanged();
-        local_bluetooth = null;
+        //停止服务
+
+        Intent intent = new Intent(BluetoothActivity.this, BluetoothService.class);
+        stopService(intent);
 
         //关闭蓝牙Socket
         if (bluetoothSocket != null) {
@@ -195,10 +256,20 @@ public class BluetoothActivity extends Activity {
                 Log.i("Bluetooth Socket", "断开蓝牙Socket错误");
             }
         }
-        Intent intent = new Intent(BluetoothActivity.this, BluetoothService.class);
-        stopService(intent);
 
-        Toast.makeText(BluetoothActivity.this, "已断开连接", Toast.LENGTH_SHORT).show();
+        //关闭蓝牙
+        if(local_bluetooth.isEnabled())
+        {
+            local_bluetooth.disable();
+        }
+
+        device_view.setText("");
+        bonded_device.clear();
+        listAdapter.clear();        //清空ListView适配器
+        listAdapter.notifyDataSetChanged();
+        local_bluetooth = null;
+
+        Toast.makeText(BluetoothActivity.this, "蓝牙已关闭", Toast.LENGTH_SHORT).show();
     }
 
     //重写权限结果返回函数

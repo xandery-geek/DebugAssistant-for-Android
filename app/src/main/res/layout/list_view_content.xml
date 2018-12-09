@@ -14,12 +14,14 @@
         android:id="@+id/device_name"
         android:layout_width="match_parent"
         android:layout_height="20dp"
-        android:textSize="15sp" />
+        android:textSize="15sp"
+        android:textColor="@color/device_item"/>
 
     <TextView
         android:id="@+id/device_address"
         android:layout_width="match_parent"
         android:layout_height="20dp"
-        android:textSize="12sp" />
+        android:textSize="12sp"
+        android:textColor="@color/device_item"/>
 </LinearLayout>
 
