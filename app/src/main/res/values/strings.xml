@@ -11,7 +11,7 @@
     <!-- Bluetooth Activity-->
     <string name="switch_name">打开蓝牙</string>
     <string name="device_name">已连接设备</string>
-    <string name="available_device">可用设备</string>
+    <string name="available_device">已绑定设备</string>
 
     <!-- Serial Activity-->
     <string name="receive_name">接收区</string>

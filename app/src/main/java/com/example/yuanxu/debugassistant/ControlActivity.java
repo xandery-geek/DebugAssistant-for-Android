@@ -231,7 +231,7 @@ public class ControlActivity extends Activity {
             String str = intent.getStringExtra("info");
             receive_text.append(str);
 
-            int offset = receive_text.getLineCount() * receive_text.getLineHeight();
+            int offset = (receive_text.getLineCount()-3) * receive_text.getLineHeight();
 
             if(offset > receive_text.getLineHeight()) {
                 receive_text.scrollTo(0, offset);

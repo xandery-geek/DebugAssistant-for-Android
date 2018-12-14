@@ -5,8 +5,10 @@ import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
+
+import java.util.Arrays;
+import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 
 public class BluetoothService extends Service
@@ -14,7 +16,6 @@ public class BluetoothService extends Service
     //输入输出流
     private static boolean run_state = false;
     private BluetoothSocket bluetoothSocket;
-    private String send_string = "";
     private Thread thread;
     private static String device_name = null;
 
@@ -43,38 +44,51 @@ public class BluetoothService extends Service
                     return;
                 }
 
-                InputStream inputStream;
-                byte[] read_byte = new byte[1024];
+                BufferedInputStream bufferedInputStream = null; //Socket 读取缓冲流
+
+                try {
+                     bufferedInputStream = new BufferedInputStream(bluetoothSocket.getInputStream());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                byte[] read_byte = new byte[1024]; //用于读取缓冲流的字节数组
 
                 //蓝牙串口Socket一直连接
                 while (bluetoothSocket != null && bluetoothSocket.isConnected())
                 {
-                    if (!send_string.isEmpty())
-                    {
-                        synchronized (this) {
-                            //发送信息, 加锁
-                            try {
-                                OutputStream outputStream = bluetoothSocket.getOutputStream();
-                                outputStream.write(send_string.getBytes());
-                                outputStream.flush();
-                                send_string = "";   //清空
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
-
                     //接收信息
                     try {
-                        inputStream = bluetoothSocket.getInputStream();
-                        if(inputStream.read(read_byte) > 0) {
-                            String str = new String(read_byte); //字节数组转字符串
-                            sendContentBroadcast(str);
+                        if (bufferedInputStream != null && waitForReadyRead(bufferedInputStream, 100))
+                        {
+                            int a = bufferedInputStream.read(read_byte);
+                            if(a >0)
+                            {
+                                StringBuilder str = new StringBuilder(new String(read_byte));
+                                Arrays.fill(read_byte, (byte) 0);
+                                while (waitForReadyRead(bufferedInputStream, 5))
+                                {
+                                    if(bufferedInputStream.read(read_byte) > 0) {
+                                        str.append(new String(read_byte));
+                                        Arrays.fill(read_byte, (byte) 0);
+                                    }
+                                }
+                                sendContentBroadcast(str.toString());
+                                String s = str.toString();
+                                System.out.print(s);
+                            }
                         }
-                    }
-                    catch (IOException e) {
+                    } catch (IOException e) {
                         e.printStackTrace();
                     }
+                }
+
+                try {
+                    if (bufferedInputStream != null) {
+                        bufferedInputStream.close();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
                 run_state = false;
             }
@@ -113,9 +127,39 @@ public class BluetoothService extends Service
 
     public void setSendStream(String s)
     {
-        synchronized(this) {
-            send_string = s;
+        if(bluetoothSocket != null && bluetoothSocket.isConnected()){
+
+            synchronized(this) {
+                try {
+                    OutputStream outputStream = bluetoothSocket.getOutputStream();
+                    outputStream.write(s.getBytes());
+                    outputStream.flush();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         }
+    }
+
+    private boolean waitForReadyRead(BufferedInputStream bis, int timeout)
+    {
+        int count =0;
+        try {
+            while(bis.available() == 0 && count < timeout)
+            {
+                Thread.sleep(10);
+                count++;
+            }
+
+            /* 缓冲区内有数据,则返回true
+             * 缓冲区内没有数据,则返回false
+             */
+            return count < timeout;
+
+        }catch (InterruptedException | IOException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     @SuppressWarnings("WeakerAccess")

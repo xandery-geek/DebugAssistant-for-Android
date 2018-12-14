@@ -39,7 +39,7 @@ public class BluetoothActivity extends Activity {
     private Switch bluetooth_switch;
     private TextView device_view;
     private ListView device_list;
-    private String device_name;
+    private String device_address;
 
     private ListAdapter listAdapter;
 
@@ -173,17 +173,17 @@ public class BluetoothActivity extends Activity {
 
     private void connectDevice(String name, String address)
     {
-        if(device_name != null)
+        if(device_address != null)
         {
-            if(device_name.equals(name))
+            if(device_address.equals(address))
             {
                 Toast.makeText(BluetoothActivity.this, "该设备已连接", Toast.LENGTH_SHORT).show();
-                return;
+                return; //设备已连接,返回
             }
             else {
 
                 try {
-                    bluetoothSocket.close();
+                    bluetoothSocket.close();    //设备未连接,先断开当前连接设备
                     device_view.setText("");
                 }
                 catch (IOException e)
@@ -211,30 +211,33 @@ public class BluetoothActivity extends Activity {
         bluetoothSocket = globalBlueSocket.getGlobalBluetoothSocket();
 
         if(bluetoothSocket != null) {
+
+            Toast.makeText(BluetoothActivity.this, "正在连接",Toast.LENGTH_SHORT).show();
+
             try {
-                Toast.makeText(BluetoothActivity.this, "正在连接",Toast.LENGTH_SHORT).show();
                 bluetoothSocket.connect();
             } catch (IOException e) {
                 Toast.makeText(BluetoothActivity.this, "连接失败", Toast.LENGTH_SHORT).show();
             }
-        }
 
-        //开启服务
-        if (bluetoothSocket != null && bluetoothSocket.isConnected())
-        {
-            device_name = name;
+            //连接成功, 开启服务
+            if (bluetoothSocket.isConnected())
+            {
+                device_address = address;
 
-            //开启服务
-            Intent intent = new Intent(BluetoothActivity.this, BluetoothService.class);
-            startService(intent);
-            BluetoothService.setName(device_name);
+                //开启服务
+                Intent intent = new Intent(BluetoothActivity.this, BluetoothService.class);
+                startService(intent);
+                BluetoothService.setName(name); //将设备名称传递给服务
 
-            device_view.setText(device_name);
-            Toast.makeText(BluetoothActivity.this, "连接成功", Toast.LENGTH_SHORT).show();
-        }
-        else
-        {
-            Toast.makeText(BluetoothActivity.this, "连接失败", Toast.LENGTH_SHORT).show();
+                device_view.setText(name);   //显示连接设备名称
+                Toast.makeText(BluetoothActivity.this, "连接成功", Toast.LENGTH_SHORT).show();
+            }
+            else
+            {
+                Toast.makeText(BluetoothActivity.this, "连接失败", Toast.LENGTH_SHORT).show();
+            }
+
         }
     }
 
