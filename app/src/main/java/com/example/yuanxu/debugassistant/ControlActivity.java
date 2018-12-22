@@ -2,19 +2,24 @@ package com.example.yuanxu.debugassistant;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.graphics.Point;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.text.method.ScrollingMovementMethod;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 
 import java.util.ArrayList;
@@ -51,6 +56,20 @@ public class ControlActivity extends Activity {
         initWidget();
         setListener();
         binBluetoothService();
+
+        SharedPreferences buttonSettings = getPreferences(Activity.MODE_PRIVATE);
+
+        //读取按键名称
+        int i=1;
+        String str;
+        for(Button button: fun_button)
+        {
+            str = buttonSettings.getString("ButtonName"+ String.valueOf(i),
+                    "按键"+String.valueOf(i));
+
+            button.setText(str);
+            i++;
+        }
     }
 
     @Override
@@ -70,6 +89,23 @@ public class ControlActivity extends Activity {
     protected void onPause() {
         super.onPause();
         unregisterReceiver(contentReceiver);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        //保存按键名称
+        SharedPreferences buttonSettings = getPreferences(Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = buttonSettings.edit();
+
+        int i = 1;
+        for(Button button : fun_button)
+        {
+            editor.putString("ButtonName" + String.valueOf(i), button.getText().toString());
+            i++;
+        }
+        editor.apply();
     }
 
     @Override
@@ -102,7 +138,8 @@ public class ControlActivity extends Activity {
     private void setListener()
     {
         for (Button button: fun_button) {
-            button.setOnClickListener(new ClickListening());
+            button.setOnClickListener(new ClickListening());    //点击事件监听
+            button.setOnLongClickListener(new LongClickListening());    //长按事件监听
         }
 
         joystick.setOnTouchListener(new View.OnTouchListener() {
@@ -266,5 +303,119 @@ public class ControlActivity extends Activity {
             }
         }
     }
+
+    private class LongClickListening implements View.OnLongClickListener
+    {
+        @Override
+        public boolean onLongClick(final View v) {
+
+            String string = ((Button)v).getText().toString();
+
+            //定义dialog, 实现接口
+            ChangeNameDialog changeNameDialog =
+                    new ChangeNameDialog(ControlActivity.this, string, new ChangeNameDialog.DialogCallBack(){
+
+                        @Override
+                        public void getName(String str) {
+
+                            if(!str.isEmpty()) {
+                                ((Button) v).setText(str);
+                            }
+                        }
+                    });
+
+            changeNameDialog.show();
+
+            return false;
+        }
+    }
 }
 
+class ChangeNameDialog extends Dialog
+{
+    private EditText nameEdit;
+    private Button cancelButton;
+    private Button yesButton;
+
+    private String name;    //按键名称
+
+    private DialogCallBack dialogCallBack;
+
+    ChangeNameDialog(Context context, String name, final DialogCallBack dialogCallBack) {
+        super(context);
+        this.name = name;
+        this.dialogCallBack = dialogCallBack;   //父类指向子类
+    }
+
+    private void initWidget()
+    {
+        nameEdit = findViewById(R.id.button_name_edit);
+        nameEdit.setText(name); //设置初始名称
+        cancelButton = findViewById(R.id.cancel_button);
+        yesButton = findViewById(R.id.yes_button);
+    }
+
+    private void setListener()
+    {
+        //使能确认按键
+        nameEdit.addTextChangedListener(new TextWatcher()
+            {
+
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if(s.toString().isEmpty())
+                    {
+                        yesButton.setEnabled(false);
+                    }
+                    else {
+                        yesButton.setEnabled(true);
+                    }
+
+                }
+            });
+
+        cancelButton.setOnClickListener(new View.OnClickListener(){
+
+            @Override
+            public void onClick(View v) {
+                ChangeNameDialog.this.dismiss();
+
+            }
+        });
+
+        yesButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String str = nameEdit.getText().toString();
+                dialogCallBack.getName(str);    //调用接口函数
+                ChangeNameDialog.this.dismiss();
+            }
+        });
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.change_name_dialog);
+
+        setCanceledOnTouchOutside(false);
+
+        initWidget();
+        setListener();
+    }
+
+    public interface DialogCallBack
+    {
+        void getName(String str);
+    }
+}
