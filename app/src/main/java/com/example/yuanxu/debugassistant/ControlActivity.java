@@ -155,41 +155,42 @@ public class ControlActivity extends Activity {
                 }
                 else if(event.getActionMasked() == MotionEvent.ACTION_MOVE)
                 {
+                    float dx = event.getRawX() - last_x;   //计算移动的距离
+                    float dy = event.getRawY() - last_y;   //
 
-                    float dx = event.getX() - last_x;   //计算移动的距离
-                    float dy = event.getY() - last_y;   //
+                    int left = (int) (joystick.getLeft() + dx);
+                    int top = (int) (joystick.getTop() + dy);
 
-                    if(dx > RADIUS)
+                    if(left - joystick_origin.x > RADIUS)
                     {
-                        dx = RADIUS;
+                        left = joystick_origin.x + RADIUS;
                     }
-                    else if (dx < -RADIUS)
+                    else if (left - joystick_origin.x  < -RADIUS)
                     {
-                        dx = -RADIUS;
-                    }
-
-                    if (dy > RADIUS)
-                    {
-                        dy = RADIUS;
-                    }
-                    else if (dy < -RADIUS)
-                    {
-                        dy = -RADIUS;
+                        left = joystick_origin.x -RADIUS;
                     }
 
-                    int left = (int) (joystick_origin.x + dx);
-                    int top = (int) (joystick_origin.y + dy);
-
+                    if (top - joystick_origin.y > RADIUS)
+                    {
+                        top = joystick_origin.y + RADIUS;
+                    }
+                    else if (top - joystick_origin.y < -RADIUS)
+                    {
+                        top = joystick_origin.y - RADIUS;
+                    }
                     //移动
                     moveJoystick(left, top);
                     Point speed = calSpeed(left, top);
                     setSpeedText(speed);
                     sendData("X"+ speed.x + "Y" + speed.y);
+
+                    last_x = event.getRawX();
+                    last_y = event.getRawY();
                 }
                 else if(event.getActionMasked() == MotionEvent.ACTION_DOWN) {
 
-                    last_x = event.getX();
-                    last_y = event.getY();
+                    last_x = event.getRawX();
+                    last_y = event.getRawY();
                 }
                 return true;
             }
